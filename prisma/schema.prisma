@@ -1,0 +1,45 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. Representação do Lead que chega via Webhook
+model Lead {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String
+  source      String  // Ex: Facebook, Instagram, Google Ads, etc.
+  status      String  // Ex: New, Contacted, Qualified, etc.
+  userId      String  // ID do usuário que está gerenciando o lead
+  user       User?     @relation(fields: [userId], references: [id])
+  logs       Log[]    // Relacionamento com a tabela de logs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([email])
+  @@index([phone])
+}
+
+// 2. Vendedores/Usuários que receberão os leads (Round- Robin)
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  role        String   @default("Sales") // Ex: Admin, Sales, etc.
+  isActive    Boolean  @default(true)
+  leads       Lead[]   // Relacionamento com a tabela de leads
+  createdAt   DateTime @default(now())
+}
+
+// 3. Histórico e Auditoria de Processamento (Garante rastreabilidade)
+model Log {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  message     String  //Detalhes do que aconteceu (Ex: Lead enviado para o usuário X, Lead rejeitado, etc.)
+  createdAt   DateTime @default(now())
+}
