@@ -1,39 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { CreateLeadDto } from './dto/create-lead.dto';
 
 @Injectable()
 export class LeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  //Injecta a fila do Redis chamada 'leads-queue'
+  constructor(@InjectQueue('leads-queue') private readonly leadsQueue: Queue) {}
 
   async handleIncomingLead(dto: CreateLeadDto) {
-    // 1. Higienização dos dados (Tratamento)
-    const cleanedName = dto.name.trim();
-    // Remove parênteses, espaços e hifens do telefone para deixar apenas números
-    const cleanedPhone = dto.phone.replace(/\D/g, '');
-
-    // 2. Persistência no PostgreSQL
-    const lead = await this.prisma.lead.create({
-      data: {
-        name: cleanedName,
-        email: dto.email.toLowerCase().trim(),
-        phone: cleanedPhone,
-        source: dto.source,
-        status: 'PENDING', // Fica pendente até ser distribuído/enviado para o chat
-      },
+    // Adiciona o lead como trabalho (job) dentro da fila do Redis
+    await this.leadsQueue.add('process-queue', dto, {
+      attempts: 3, //Se falhar por instabilidade, tenta repocessar até 3 vezes
+      backoff: 5000, //Aguarda 5 segundos entre as tentativas de reprocessamento
     });
-
-    // 3. Criar um log de auditoria no banco
-    await this.prisma.log.create({
-      data: {
-        leadId: lead.id,
-        message: `Lead recebido e higienizado com sucesso da origem: ${dto.source}`,
-      },
-    });
-
     return {
-      message: 'Lead recebido com sucesso',
-      leadId: lead.id,
+      sucess: true,
+      message: 'Lead recebido e enviado para a fila de processamento.',
     };
   }
 }

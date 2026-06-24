@@ -4,6 +4,7 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
+  engineType = "library"
 }
 
 // 1. Representação do Lead que chega via Webhook
