@@ -1,23 +1,24 @@
 datasource db {
   provider = "postgresql"
+  // 🟢 A URL foi removida por exigência do Prisma v7
 }
 
 generator client {
   provider = "prisma-client-js"
-  engineType = "library"
 }
 
-// 1. Representação do Lead que chega via Webhook
+// ... (mantenha suas models Lead, User e Log como estão)
+
 model Lead {
   id          String   @id @default(cuid())
   name        String
   email       String
   phone       String
-  source      String  // Ex: Facebook, Instagram, Google Ads, etc.
-  status      String  // Ex: New, Contacted, Qualified, etc.
-  userId      String  // ID do usuário que está gerenciando o lead
-  user       User?     @relation(fields: [userId], references: [id])
-  logs       Log[]    // Relacionamento com a tabela de logs
+  source      String
+  status      String
+  userId      String?  
+  user        User?    @relation(fields: [userId], references: [id])
+  logs        Log[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -25,22 +26,21 @@ model Lead {
   @@index([phone])
 }
 
-// 2. Vendedores/Usuários que receberão os leads (Round- Robin)
 model User {
-  id          String   @id @default(cuid())
-  name        String
-  email       String   @unique
-  role        String   @default("Sales") // Ex: Admin, Sales, etc.
-  isActive    Boolean  @default(true)
-  leads       Lead[]   // Relacionamento com a tabela de leads
-  createdAt   DateTime @default(now())
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  role               String   @default("Sales")
+  isActive           Boolean  @default(true)
+  lastAssignedLeadAt DateTime @default(now()) 
+  leads              Lead[]
+  createdAt          DateTime @default(now())
 }
 
-// 3. Histórico e Auditoria de Processamento (Garante rastreabilidade)
 model Log {
   id          String   @id @default(cuid())
   leadId      String
   lead        Lead     @relation(fields: [leadId], references: [id])
-  message     String  //Detalhes do que aconteceu (Ex: Lead enviado para o usuário X, Lead rejeitado, etc.)
+  message     String
   createdAt   DateTime @default(now())
 }

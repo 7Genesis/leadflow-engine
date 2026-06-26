@@ -7,7 +7,8 @@ export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
 
   @Post('webhook')
-  async handleWebhook(@Body() dto: CreateLeadDto) {
-    return this.leadsService.handleIncomingLead(dto);
+  async handleWebhook(@Body() leadData: CreateLeadDto) {
+    // 🟢 Ajustado para o nome correto do método: handleIncomingLead
+    return await this.leadsService.handleIncomingLead(leadData);
   }
 }

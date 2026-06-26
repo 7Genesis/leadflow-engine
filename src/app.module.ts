@@ -1,22 +1,18 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { PrismaModule } from './prisma/prisma.module';
+import { BullModule } from '@nestjs/bull';
 import { LeadsModule } from './leads/leads.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
     BullModule.forRoot({
-      connection: {
+      redis: {
         host: 'localhost',
         port: 6379,
       },
     }),
-    PrismaModule,
     LeadsModule,
+    PrismaModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

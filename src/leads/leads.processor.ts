@@ -1,38 +1,58 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Processor, Process } from '@nestjs/bull';
+import type { Job } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 
-@Processor('leads-queue')
-export class LeadsProcessor extends WorkerHost {
-    constructor(private readonly prisma: PrismaService) {
-        super();
-    }
-    
-    async process(job: Job<any, any, string>): Promise<any> {
-        const { name, email, phone, source } = job.data;
+@Processor('lead-queue')
+export class LeadsProcessor {
+  constructor(private prismaService: PrismaService) {}
 
-        //1. Limpeza a padronização dos dados em background
-        const cleanedName = name.trim();
-        const cleanedPhone = phone.replace(/\D/g, ''); //Mantem apenas números
+  @Process('process-lead')
+  async handleLead(job: Job) {
+    console.log('--- Processando novo lead da fila ---');
+    const data = job.data;
 
-        //2. Salva no banco PostgreSQL via Prisma
-        const lead = await this.prisma.lead.create({
-            data: {
-                name: cleanedName,
-                email: email.toLowerCase().trim(),
-                phone: cleanedPhone,
-                source: source,
-                status: 'PROCESSED',
-                userId: 'default', // Adicionado pois o schema requer este campo
-            },
+    try {
+      // Iniciamos uma transação para garantir que a inserção do Lead 
+      // e a atualização do vendedor ocorram no mesmo pulso do banco.
+      await this.prismaService.db.$transaction(async (tx) => {
+        
+        // 1. Busca o vendedor ativo há mais tempo sem receber leads
+        const salesperson = await tx.user.findFirst({
+          where: { isActive: true },
+          orderBy: { lastAssignedLeadAt: 'asc' },
         });
-        //3. Cria o log de auditoria
-        await this.prisma.log.create({
-            data: {
-                leadId: lead.id,
-                message: `[Fila] Lead processado de forma assíncrona da origem ${source}`,
-            },
+
+        if (!salesperson) {
+          console.log('⚠️ Nenhum vendedor ativo encontrado para receber o lead.');
+          return;
+        }
+
+        // 2. Registra o Lead e vincula ao ID do vendedor selecionado
+        await tx.lead.create({
+          data: {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            source: data.source,
+            status: data.status || 'New',
+            userId: salesperson.id, // O relacionamento chave
+          },
         });
-        console.log(`[Redis] Lead ${lead.name} processado com sucesso!`);
+
+        // 3. Atualiza o relógio temporal do vendedor para o final da fila
+        await tx.user.update({
+          where: { id: salesperson.id },
+          data: { lastAssignedLeadAt: new Date() },
+        });
+
+        console.log(`✅ Sucesso! Lead "${data.name}" atribuído ao vendedor: ${salesperson.name}`);
+      });
+      
+    } catch (error) {
+      console.error('❌ Falha crítica ao gravar lead no banco:', error);
+      // Lançar o erro faz com que o Bull saiba que o processamento falhou
+      // e coloque o job de volta na fila para ser tentado novamente (retry).
+      throw error; 
     }
+  }
 }
