@@ -10,10 +10,10 @@ export class LeadsService {
   async handleIncomingLead(dto: CreateLeadDto) {
     // Adiciona o job à fila com estratégia de resiliência
     await this.leadsQueue.add('process-lead', dto, {
-      attempts: 3, 
-      backoff: 5000, 
+      attempts: 3,
+      backoff: 5000,
+      priority: dto.priority || 0, // Prioridade padrão é 0
     });
-    
     return {
       success: true,
       message: 'Lead recebido e enviado para a fila de processamento.',

@@ -12,11 +12,12 @@ generator client {
 model Lead {
   id          String   @id @default(cuid())
   name        String
+  priority    Int?  @default(1)
   email       String
   phone       String
   source      String
-  status      String
-  userId      String?  
+  status      String @default("New")
+  userId      String?
   user        User?    @relation(fields: [userId], references: [id])
   logs        Log[]
   createdAt   DateTime @default(now())

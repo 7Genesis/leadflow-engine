@@ -1,14 +1,23 @@
 import { Controller, Post, Body } from '@nestjs/common';
-import { LeadsService } from './leads.service';
-import { CreateLeadDto } from './dto/create-lead.dto';
+import type { Queue } from 'bull';
+import { InjectQueue } from '@nestjs/bull';
+
+export interface CreateLeadDto {
+  name: string;
+  email: string;
+  phone?: string;
+  source?: string;
+  status?: string;
+  priority?: number;
+}
 
 @Controller('leads')
 export class LeadsController {
-  constructor(private readonly leadsService: LeadsService) {}
+  constructor(@InjectQueue('lead-queue') private readonly leadsQueue: Queue) {}
 
   @Post('webhook')
-  async handleWebhook(@Body() leadData: CreateLeadDto) {
-    // 🟢 Ajustado para o nome correto do método: handleIncomingLead
-    return await this.leadsService.handleIncomingLead(leadData);
+  async receiveWebhook(@Body() data: CreateLeadDto) {
+    await this.leadsQueue.add('process-lead', data);
+    return { success: true, message: 'Lead na fila de processamento.' };
   }
 }

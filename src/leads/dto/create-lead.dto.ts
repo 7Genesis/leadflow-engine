@@ -8,12 +8,13 @@ export class CreateLeadDto {
   @IsEmail()
   @IsNotEmpty()
   email: string;
+  @IsString()
+  @IsNotEmpty()
+  phone?: string;
 
   @IsString()
   @IsNotEmpty()
-  phone: string;
-
-  @IsString()
-  @IsNotEmpty()
-  source: string;
+  source?: string;
+  status?: string;
+  priority?: number;
 }

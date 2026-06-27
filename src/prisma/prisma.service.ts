@@ -10,8 +10,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 
   constructor() {
     // Definimos a string manualmente para eliminar a falha de carga do .env
-    const connectionString = "postgresql://postgres:postgres@localhost:5432/leadflow?schema=public";
-    
+    const connectionString =
+      'postgresql://postgres:postgres@localhost:5432/leadflow?schema=public';
+
     this.pool = new Pool({ connectionString });
     const adapter = new PrismaPg(this.pool);
     this.db = new PrismaClient({ adapter });
