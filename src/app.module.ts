@@ -8,16 +8,19 @@ import { PrismaModule } from './prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,
+    // 1. Conexão base com o Redis
     BullModule.forRoot({
       redis: {
         host: 'localhost',
         port: 6379,
       },
     }),
+    // 2. Inicialização do Painel (Middleware do Express)
     BullBoardModule.forRoot({
-      route: '/admin/queue',
+      route: '/admin/queues',
       adapter: ExpressAdapter,
     }),
+    // 3. Suas lógicas de negócio por último
     LeadsModule,
   ],
 })
