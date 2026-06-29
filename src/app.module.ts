@@ -12,7 +12,7 @@ import { PrismaModule } from './prisma/prisma.module';
     BullModule.forRoot({
       redis: {
         host: 'localhost',
-        port: 6379,
+        port: 6380,
       },
     }),
     // 2. Inicialização do Painel (Middleware do Express)

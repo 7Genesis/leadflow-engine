@@ -9,9 +9,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly pool: Pool;
 
   constructor() {
-    // Definimos a string manualmente para eliminar a falha de carga do .env
+    // Alinha a rota de conexão: Prioriza o .env, com fallback direto para o Docker (porta 5433 e banco leadflow_db)
+    // O uso de 127.0.0.1 contorna o bug de resolução de IPv6 do Node 22
     const connectionString =
-      'postgresql://postgres:postgres@localhost:5432/leadflow?schema=public';
+      process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5433/leadflow_db?schema=public';
 
     this.pool = new Pool({ connectionString });
     const adapter = new PrismaPg(this.pool);
@@ -21,18 +22,18 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     try {
       await this.db.$connect();
-      console.log('✅ Conectado ao banco "leadflow" com sucesso!');
+      console.log(' Conectado ao banco "leadflow_db" (Docker) com sucesso!');
     } catch (e) {
-      console.error('❌ Erro crítico ao conectar no banco:', e);
+      console.error(' Erro crítico ao conectar no banco:', e);
     }
   }
 
   async onModuleDestroy() {
     try {
       await this.db.$disconnect();
-      console.log('✅ Desconectado do banco "leadflow" com sucesso!');
+      console.log(' Desconectado do banco "leadflow_db" com sucesso!');
     } catch (e) {
-      console.error('❌ Erro crítico ao desconectar do banco:', e);
+      console.error('Erro crítico ao desconectar do banco:', e);
     }
     await this.pool.end();
   }
