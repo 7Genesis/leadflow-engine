@@ -23,5 +23,7 @@ import { PrismaModule } from './prisma/prisma.module';
     // 3. Suas lógicas de negócio por último
     LeadsModule,
   ],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}
