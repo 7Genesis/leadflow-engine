@@ -1,8 +1,8 @@
 {
   "name": "leadflow-engine",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "Motor de distribuição de leads por webhook: fila no Redis (Bull), round-robin entre vendedores e painel Bull Board.",
+  "author": "Genesis Melo",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

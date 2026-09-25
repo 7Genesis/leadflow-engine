@@ -1,98 +1,54 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# LeadFlow Engine
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Recebe leads por webhook e os distribui entre vendedores em rodízio (round-robin), sem deixar quem chama esperando o banco de dados. Feito com **NestJS**, **Bull (Redis)**, **Prisma** e **PostgreSQL**.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Por que existe
 
-## Description
+Se o webhook aplica as regras e grava no banco na mesma requisição, a latência sobe e um pico de leads (uma campanha do Meta Ads, por exemplo) pode estourar o tempo de resposta e fazer o lead se perder. Aqui, receber e processar são etapas separadas por uma fila.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Como funciona
 
-## Project setup
+1. `POST /leads/webhook` coloca o lead na fila `lead-queue` (Redis) e responde na hora.
+2. Um worker (`LeadsProcessor`) consome a fila. Numa única transação, ele escolhe o vendedor ativo que recebeu lead há mais tempo (`lastAssignedLeadAt`), cria o lead já atribuído a ele e atualiza a vez desse vendedor.
+3. A escolha do vendedor usa bloqueio pessimista (`SELECT ... FOR UPDATE`) no registro dele.
+4. O painel **Bull Board** mostra o estado dos jobs (aguardando, ativo, concluído e falho) em `/admin/queues`.
+
+Exemplo de chamada:
 
 ```bash
-$ npm install
+curl -X POST http://localhost:3000/leads/webhook \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Maria", "email": "maria@exemplo.com", "phone": "11999999999", "source": "meta-ads" }'
 ```
 
-## Compile and run the project
+## Como rodar
+
+Pré-requisitos: Node.js e Docker.
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+docker compose up -d              # PostgreSQL (porta 5433) e Redis (porta 6380)
+cp .env.example .env
+npm install
+npx prisma migrate deploy         # cria as tabelas
+npx prisma db seed                # vendedores de exemplo
+npm run start:dev                 # API em http://localhost:3000
 ```
 
-## Run tests
+Depois de enviar um lead, abra `http://localhost:3000/admin/queues` para ver o job passando pela fila.
 
-```bash
-# unit tests
-$ npm run test
+## Estrutura
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```
+src/leads/leads.controller.ts   recebe o webhook e enfileira
+src/leads/leads.processor.ts    worker que consome a fila
+src/leads/leads.service.ts      transação de atribuição (round-robin)
+src/prisma/                     conexão com o PostgreSQL (Prisma 7 + adapter-pg)
+prisma/                         schema, migrations e seed
 ```
 
-## Deployment
+## Limitações e próximos passos
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **Validação do payload:** o `CreateLeadDto` (com class-validator) já existe, mas o controller ainda usa uma interface local, então o webhook não valida o corpo em tempo de execução.
+- **Tentativas:** o `LeadsService.handleIncomingLead` define tentativas e backoff, mas o controller enfileira sem essas opções.
+- **Rodízio sob concorrência:** o `FOR UPDATE` protege o registro do vendedor escolhido. Para que dois leads simultâneos não caiam no mesmo vendedor, o passo seguinte é `FOR UPDATE SKIP LOCKED` com uma nova tentativa quando não houver vendedor livre.
+- **Testes:** hoje só existe o teste padrão do Nest; faltam testes do processor e da transação.

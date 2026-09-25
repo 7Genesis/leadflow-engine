@@ -1,13 +1,11 @@
 datasource db {
   provider = "postgresql"
-  // 🟢 A URL foi removida por exigência do Prisma v7
+  // A URL da conexão fica em prisma.config.ts (Prisma 7)
 }
 
 generator client {
   provider = "prisma-client-js"
 }
-
-// ... (mantenha suas models Lead, User e Log como estão)
 
 model Lead {
   id          String   @id @default(cuid())
