@@ -12,6 +12,11 @@ services:
       POSTGRES_DB: leadflow_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d leadflow_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   redis:
@@ -22,6 +27,35 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+
+  # Perfil "app": `docker compose --profile app up --build`
+  # (sem o perfil, `docker compose up -d` sobe só PostgreSQL e Redis, como antes)
+  migrate:
+    profiles: ["app"]
+    build:
+      context: .
+      target: build
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/leadflow_db?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    profiles: ["app"]
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/leadflow_db?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
 
 
 volumes:
