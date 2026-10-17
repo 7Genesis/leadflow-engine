@@ -11,8 +11,9 @@ import { PrismaModule } from './prisma/prisma.module';
     // 1. Conexão base com o Redis
     BullModule.forRoot({
       redis: {
-        host: 'localhost',
-        port: 6380,
+        // Padrão: o Redis do docker-compose.yml acessado da máquina local (porta 6380)
+        host: process.env.REDIS_HOST ?? 'localhost',
+        port: Number(process.env.REDIS_PORT ?? 6380),
       },
     }),
     // 2. Inicialização do Painel (Middleware do Express)

@@ -36,6 +36,30 @@ npm run start:dev                 # API em http://localhost:3000
 
 Depois de enviar um lead, abra `http://localhost:3000/admin/queues` para ver o job passando pela fila.
 
+### Tudo em Docker (API + PostgreSQL + Redis)
+
+```bash
+docker compose --profile app up --build
+```
+
+O perfil `app` acrescenta dois serviços ao compose: `migrate` (roda `prisma migrate deploy` e termina) e `api` (a aplicação, em `http://localhost:3000`). Sem o perfil, `docker compose up -d` sobe só o PostgreSQL e o Redis, como antes. Dentro do compose a API usa `DATABASE_URL`, `REDIS_HOST` e `REDIS_PORT` apontando para os serviços `postgres` e `redis`.
+
+O banco começa sem vendedores. Para ter alguém que receba os leads, rode o seed (ele **apaga todos os vendedores** e cria dois de exemplo):
+
+```bash
+docker compose --profile app run --rm migrate npx prisma db seed
+```
+
+O `Dockerfile` é multi-stage: o estágio `build` instala as dependências, gera o Prisma Client e compila; o estágio final leva só as dependências de produção e o `dist`, rodando como usuário `node`.
+
+### Variáveis de ambiente
+
+| Variável | Padrão | Uso |
+|---|---|---|
+| `DATABASE_URL` | `postgresql://postgres:postgres@127.0.0.1:5433/leadflow_db?schema=public` | conexão com o PostgreSQL |
+| `REDIS_HOST` | `localhost` | host do Redis da fila |
+| `REDIS_PORT` | `6380` | porta do Redis da fila |
+
 ## Estrutura
 
 ```
@@ -46,16 +70,31 @@ src/prisma/                     conexão com o PostgreSQL (Prisma 7 + adapter-pg
 prisma/                         schema, migrations e seed
 ```
 
-## Testes do rodízio
+## Testes
 
-O teste manda 300 leads, 10 por vez, para 3 vendedores e exige que a diferença entre quem mais e quem menos recebeu fique em no máximo 12 leads (o ideal é 100 para cada). Como ele apaga vendedores e leads, só roda contra um banco cujo nome termina em `_test`.
+Testes unitários (não precisam de banco nem de Redis):
 
 ```bash
+npm test
+```
+
+### Teste de concorrência do rodízio
+
+O teste (`test/round-robin.e2e-spec.ts`) manda 300 leads, 10 por vez, para 3 vendedores e exige que a diferença entre quem mais e quem menos recebeu fique em no máximo 12 leads (o ideal é 100 para cada). Há ainda um caso de atribuição em sequência e um caso sem vendedor ativo.
+
+**Ele só roda contra um banco cujo nome termina em `_test`**, porque apaga vendedores, leads e logs. Com qualquer outro nome de banco os 3 casos são **pulados** (o Jest mostra `3 skipped`) e o comando termina sem erro, o que engana. Só precisa do PostgreSQL: a fila é substituída por um stub, então o Redis não é usado.
+
+```bash
+docker compose up -d postgres
 docker compose exec postgres createdb -U postgres leadflow_test
 export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/leadflow_test?schema=public"
 npx prisma migrate deploy
 npm run test:rodizio
 ```
+
+Deu certo quando o Jest mostra `Tests: 3 passed, 3 total`. Use `unset DATABASE_URL` (ou abra outro terminal) depois, para o `npm run start:dev` voltar ao banco `leadflow_db`.
+
+O `npm run test:e2e` roda todos os arquivos `*.e2e-spec.ts`, e hoje não serve: o `test/app.e2e-spec.ts` espera `GET /` responder `Hello World!`, mas o `AppController` não está registrado no `AppModule` (a resposta é 404). Por isso o CI roda apenas o `test:rodizio`.
 
 Medição feita com 10 rodadas de 300 leads, 10 simultâneos, PostgreSQL 15:
 
@@ -66,7 +105,13 @@ Medição feita com 10 rodadas de 300 leads, 10 simultâneos, PostgreSQL 15:
 
 Com `FOR UPDATE` sozinho, quem esperava o bloqueio já tinha escolhido o mesmo vendedor e o recebia de novo quando o outro lead terminava.
 
+## CI
+
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em push na `main` e em pull request. Ele sobe um PostgreSQL com o banco `leadflow_test`, instala as dependências, gera o Prisma Client, compila, roda `npm test`, aplica as migrations e roda o `test:rodizio` (de verdade, não pulado). Um segundo job faz o build da imagem Docker. O lint (`npm run lint`) não está no CI: hoje ele aponta erros de formatação do Prettier em vários arquivos.
+
 ## Limitações e próximos passos
+
+- **`npm run start:prod`:** aponta para `node dist/main`, mas o build gera `dist/src/main.js` (a imagem Docker já usa o caminho certo).
 
 - **Validação do payload:** o `CreateLeadDto` (com class-validator) já existe, mas o controller ainda usa uma interface local, então o webhook não valida o corpo em tempo de execução.
 - **Tentativas:** o `LeadsService.handleIncomingLead` define tentativas e backoff, mas o controller enfileira sem essas opções.
