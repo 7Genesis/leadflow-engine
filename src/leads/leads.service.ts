@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type Vendedor = { id: string; name: string };
 
-const MAX_TENTATIVAS = 6;
+const MAX_TENTATIVAS = 30;
 const ESPERA_MS = 15;
 
 @Injectable()
@@ -35,7 +35,10 @@ export class LeadsService {
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
       const resultado = await this.tentarAtribuir(dto);
       if (resultado) return resultado;
-      await new Promise((r) => setTimeout(r, ESPERA_MS * tentativa));
+      // Espera com variação aleatória, para os leads que esperam não tentarem todos no mesmo instante.
+      const espera =
+        ESPERA_MS + Math.random() * ESPERA_MS * Math.min(tentativa, 4);
+      await new Promise((r) => setTimeout(r, espera));
     }
     throw new Error('Vendedores ocupados, tente novamente.');
   }
