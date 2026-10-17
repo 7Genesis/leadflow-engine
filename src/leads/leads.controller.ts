@@ -1,15 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import type { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
-
-export interface CreateLeadDto {
-  name: string;
-  email: string;
-  phone?: string;
-  source?: string;
-  status?: string;
-  priority?: number;
-}
+import { CreateLeadDto } from './dto/create-lead.dto';
 
 @Controller('leads')
 export class LeadsController {
@@ -17,7 +9,10 @@ export class LeadsController {
 
   @Post('webhook')
   async receiveWebhook(@Body() data: CreateLeadDto) {
-    await this.leadsQueue.add('process-lead', data);
+    await this.leadsQueue.add('process-lead', data, {
+      attempts: 3,
+      backoff: 5000,
+    });
     return { success: true, message: 'Lead na fila de processamento.' };
   }
 }
