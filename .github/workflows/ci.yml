@@ -42,6 +42,9 @@ jobs:
       - name: Gerar o Prisma Client
         run: npx prisma generate
 
+      - name: Lint
+        run: npx eslint "{src,test}/**/*.ts"
+
       - name: Build
         run: npm run build
 
