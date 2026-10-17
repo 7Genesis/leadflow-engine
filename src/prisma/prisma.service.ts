@@ -12,7 +12,8 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     // Alinha a rota de conexão: Prioriza o .env, com fallback direto para o Docker (porta 5433 e banco leadflow_db)
     // O uso de 127.0.0.1 contorna o bug de resolução de IPv6 do Node 22
     const connectionString =
-      process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5433/leadflow_db?schema=public';
+      process.env.DATABASE_URL ||
+      'postgresql://postgres:postgres@127.0.0.1:5433/leadflow_db?schema=public';
 
     this.pool = new Pool({ connectionString });
     const adapter = new PrismaPg(this.pool);

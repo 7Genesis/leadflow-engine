@@ -1,5 +1,8 @@
 # LeadFlow Engine
 
+[![CI](https://github.com/7Genesis/leadflow-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/7Genesis/leadflow-engine/actions/workflows/ci.yml)
+[![Licença: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
+
 Recebe leads por webhook e os distribui entre vendedores em rodízio (round-robin), sem deixar quem chama esperando o banco de dados. Feito com **NestJS**, **Bull (Redis)**, **Prisma** e **PostgreSQL**.
 
 ## Por que existe
@@ -12,6 +15,12 @@ Se o webhook aplica as regras e grava no banco na mesma requisição, a latênci
 2. Um worker (`LeadsProcessor`) consome a fila. Numa única transação, ele escolhe o vendedor ativo que recebeu lead há mais tempo (`lastAssignedLeadAt`), cria o lead já atribuído a ele e atualiza a vez desse vendedor.
 3. A escolha do vendedor usa bloqueio pessimista com `SELECT ... FOR UPDATE SKIP LOCKED`: se outro lead já está sendo atribuído a um vendedor, ele é pulado. Se todos estiverem ocupados, o serviço espera alguns milissegundos e tenta de novo.
 4. O painel **Bull Board** mostra o estado dos jobs (aguardando, ativo, concluído e falho) em `/admin/queues`.
+
+O corpo é validado: `name` e `email` (e-mail válido) são obrigatórios; `phone`, `source` e `priority` (inteiro) são opcionais. Payload inválido recebe `400` e não entra na fila. Cada job é enfileirado com 3 tentativas e espera de 5 segundos entre elas.
+
+Painel Bull Board com os jobs concluídos (leads de exemplo):
+
+![Bull Board mostrando a fila lead-queue com os jobs process-lead concluídos](docs/bull-board.png)
 
 Exemplo de chamada:
 
@@ -107,12 +116,10 @@ Com `FOR UPDATE` sozinho, quem esperava o bloqueio já tinha escolhido o mesmo v
 
 ## CI
 
-O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em push na `main` e em pull request. Ele sobe um PostgreSQL com o banco `leadflow_test`, instala as dependências, gera o Prisma Client, compila, roda `npm test`, aplica as migrations e roda o `test:rodizio` (de verdade, não pulado). Um segundo job faz o build da imagem Docker. O lint (`npm run lint`) não está no CI: hoje ele aponta erros de formatação do Prettier em vários arquivos.
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em push na `main` e em pull request. Ele sobe um PostgreSQL com o banco `leadflow_test`, instala as dependências, gera o Prisma Client, compila, roda `npm test`, aplica as migrations e roda o `test:rodizio` (de verdade, não pulado). Um segundo job faz o build da imagem Docker. O workflow também roda o ESLint (com o Prettier) antes do build.
 
 ## Limitações e próximos passos
 
-- **`npm run start:prod`:** aponta para `node dist/main`, mas o build gera `dist/src/main.js` (a imagem Docker já usa o caminho certo).
-
-- **Validação do payload:** o `CreateLeadDto` (com class-validator) já existe, mas o controller ainda usa uma interface local, então o webhook não valida o corpo em tempo de execução.
-- **Tentativas:** o `LeadsService.handleIncomingLead` define tentativas e backoff, mas o controller enfileira sem essas opções.
-- **Testes:** o rodízio sob concorrência tem teste (veja a seção acima); ainda faltam testes do processor e do endpoint do webhook.
+- **Testes:** o rodízio sob concorrência e a validação do payload têm teste; ainda faltam testes do processor e do endpoint do webhook.
+- **`npm run test:e2e`:** continua rodando o `test/app.e2e-spec.ts`, que espera `GET /` responder `Hello World!` (veja a seção de testes). Por isso o CI usa só o `test:rodizio`.
+- **Autenticação do webhook:** o endpoint é aberto; não há assinatura nem token para quem chama.
