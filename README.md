@@ -12,7 +12,7 @@ Times comerciais recebem leads em rajadas (uma campanha do Meta Ads, por exemplo
 O que o projeto garante:
 
 - **Resposta imediata:** o webhook só valida e enfileira; a atribuição acontece depois, no worker.
-- **Rodízio justo sob concorrência:** a escolha do vendedor usa `FOR UPDATE SKIP LOCKED`, então leads simultâneos não disputam o mesmo vendedor. Na medição da seção [Testes](#teste-de-concorrência-do-rodízio), a diferença média entre quem mais e quem menos recebeu cai de 33,7 para 3,2 leads (300 leads, 10 simultâneos, 3 vendedores).
+- **Rodízio justo sob concorrência:** a escolha do vendedor usa `FOR UPDATE SKIP LOCKED`, então leads simultâneos não disputam o mesmo vendedor. Na medição da seção [Testes](#teste-de-concorrência-do-rodízio), a diferença média entre quem mais e quem menos recebeu cai de 20,1 para 2,2 leads (300 leads, 10 simultâneos, 3 vendedores).
 - **Atribuição atômica:** criar o lead e passar a vez do vendedor acontecem na mesma transação; ou os dois valem, ou nenhum.
 
 ## Por que existe
@@ -116,16 +116,25 @@ Deu certo quando o Jest mostra `Tests: 3 passed, 3 total`. Use `unset DATABASE_U
 
 O `npm run test:e2e` roda todos os arquivos `*.e2e-spec.ts`, e hoje não serve: o `test/app.e2e-spec.ts` espera `GET /` responder `Hello World!`, mas o `AppController` não está registrado no `AppModule` (a resposta é 404). Por isso o CI roda apenas o `test:rodizio`.
 
-Medição feita com 10 rodadas de 300 leads, 10 simultâneos, PostgreSQL 15:
+### Comparação FOR UPDATE x SKIP LOCKED
+
+O script `scripts/comparar-locks.ts` roda as duas estratégias com 300 leads, 10 simultâneos e 3 vendedores, e imprime a média, o mínimo e o máximo da diferença entre o vendedor que mais e o que menos recebeu. Ele usa o mesmo `LeadsService` de produção; só a cláusula de bloqueio é trocada, numa subclasse dentro do script. Como o teste, apaga vendedores e leads e por isso exige um banco cujo nome termina em `_test` (use o `DATABASE_URL` da seção anterior).
+
+```bash
+npm run bench:rodizio            # 10 rodadas por estratégia
+npm run bench:rodizio -- 20      # outro número de rodadas
+```
+
+Resultado de uma execução com 10 rodadas, PostgreSQL 15 em Docker:
 
 | Estratégia | Diferença média entre o vendedor que mais e o que menos recebeu | Maior fatia (ideal: 100) |
 |---|---|---|
-| `FOR UPDATE` | 33,7 (de 20 a 54) | 133 |
-| `FOR UPDATE SKIP LOCKED` | 3,2 (de 0 a 5) | 103 |
+| `FOR UPDATE` | 20,1 (de 6 a 34) | 120 |
+| `FOR UPDATE SKIP LOCKED` | 2,2 (de 2 a 3) | 101 |
 
 Com `FOR UPDATE` sozinho, quem esperava o bloqueio já tinha escolhido o mesmo vendedor e o recebia de novo quando o outro lead terminava.
 
-Os números variam de uma máquina para outra. O script dessa comparação não está versionado: o teste `test:rodizio` cobre só a versão com `SKIP LOCKED`. Para ver a diferença, tire o `SKIP LOCKED` da consulta em `src/leads/leads.service.ts` e rode `npm run test:rodizio` algumas vezes: a diferença sobe e o teste passa a falhar (limite de 12) em parte das execuções.
+Os números variam de uma máquina para outra e de uma execução para outra (a diferença com `FOR UPDATE` oscila bastante entre rodadas); o que se repete é a ordem de grandeza: com `SKIP LOCKED` fica em poucos leads, com `FOR UPDATE` sozinho chega a dezenas.
 
 ## CI
 

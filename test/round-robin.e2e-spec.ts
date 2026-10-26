@@ -34,8 +34,7 @@ const rodar = nomeBanco.endsWith('_test');
     const valores = Object.values(contagem);
     const diferenca = Math.max(...valores) - Math.min(...valores);
     expect(valores.reduce((a, b) => a + b, 0)).toBe(total);
-    // Com FOR UPDATE sozinho a diferença média medida foi de ~34 leads (mínimo 20);
-    // com SKIP LOCKED ela fica entre 0 e 5.
+    // Com SKIP LOCKED a diferença fica em poucos leads; veja `npm run bench:rodizio` para a comparação com FOR UPDATE.
     expect(diferenca).toBeLessThanOrEqual(12);
   }, 60000);
 
