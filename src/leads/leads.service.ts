@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
+import { Prisma } from '@prisma/client';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -12,6 +13,9 @@ const ESPERA_MS = 15;
 @Injectable()
 export class LeadsService {
   private readonly logger = new Logger(LeadsService.name);
+
+  // Cláusula de bloqueio da escolha do vendedor. Uma subclasse pode trocá-la (o script de comparação faz isso).
+  protected readonly bloqueio = Prisma.sql`FOR UPDATE SKIP LOCKED`;
 
   constructor(
     @InjectQueue('lead-queue') private readonly leadsQueue: Queue,
@@ -53,7 +57,7 @@ export class LeadsService {
         WHERE "isActive" = true
         ORDER BY "lastAssignedLeadAt" ASC
         LIMIT 1
-        FOR UPDATE SKIP LOCKED
+        ${this.bloqueio}
       `;
 
       if (!users || users.length === 0) {

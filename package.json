@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:rodizio": "jest --config ./test/jest-e2e.json test/round-robin.e2e-spec.ts"
+    "test:rodizio": "jest --config ./test/jest-e2e.json test/round-robin.e2e-spec.ts",
+    "bench:rodizio": "ts-node scripts/comparar-locks.ts"
   },
   "dependencies": {
     "@bull-board/api": "^8.0.1",
