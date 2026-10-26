@@ -5,6 +5,16 @@
 
 Recebe leads por webhook e os distribui entre vendedores em rodízio (round-robin), sem deixar quem chama esperando o banco de dados. Feito com **NestJS**, **Bull (Redis)**, **Prisma** e **PostgreSQL**.
 
+## Problema
+
+Times comerciais recebem leads em rajadas (uma campanha do Meta Ads, por exemplo) e precisam entregar cada um a um vendedor. Distribuir na mão, ou com um script que lê "quem é o próximo" e depois grava, falha justamente no pico: dois leads que chegam juntos veem o mesmo "próximo" e caem no mesmo vendedor, e quem fica esperando o banco pode perder o lead.
+
+O que o projeto garante:
+
+- **Resposta imediata:** o webhook só valida e enfileira; a atribuição acontece depois, no worker.
+- **Rodízio justo sob concorrência:** a escolha do vendedor usa `FOR UPDATE SKIP LOCKED`, então leads simultâneos não disputam o mesmo vendedor. Na medição da seção [Testes](#teste-de-concorrência-do-rodízio), a diferença média entre quem mais e quem menos recebeu cai de 33,7 para 3,2 leads (300 leads, 10 simultâneos, 3 vendedores).
+- **Atribuição atômica:** criar o lead e passar a vez do vendedor acontecem na mesma transação; ou os dois valem, ou nenhum.
+
 ## Por que existe
 
 Se o webhook aplica as regras e grava no banco na mesma requisição, a latência sobe e um pico de leads (uma campanha do Meta Ads, por exemplo) pode estourar o tempo de resposta e fazer o lead se perder. Aqui, receber e processar são etapas separadas por uma fila.
@@ -97,6 +107,7 @@ O teste (`test/round-robin.e2e-spec.ts`) manda 300 leads, 10 por vez, para 3 ven
 docker compose up -d postgres
 docker compose exec postgres createdb -U postgres leadflow_test
 export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/leadflow_test?schema=public"
+npx prisma generate
 npx prisma migrate deploy
 npm run test:rodizio
 ```
@@ -113,6 +124,8 @@ Medição feita com 10 rodadas de 300 leads, 10 simultâneos, PostgreSQL 15:
 | `FOR UPDATE SKIP LOCKED` | 3,2 (de 0 a 5) | 103 |
 
 Com `FOR UPDATE` sozinho, quem esperava o bloqueio já tinha escolhido o mesmo vendedor e o recebia de novo quando o outro lead terminava.
+
+Os números variam de uma máquina para outra. O script dessa comparação não está versionado: o teste `test:rodizio` cobre só a versão com `SKIP LOCKED`. Para ver a diferença, tire o `SKIP LOCKED` da consulta em `src/leads/leads.service.ts` e rode `npm run test:rodizio` algumas vezes: a diferença sobe e o teste passa a falhar (limite de 12) em parte das execuções.
 
 ## CI
 
